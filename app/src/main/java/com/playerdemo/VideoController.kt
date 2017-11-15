@@ -1,74 +1,41 @@
 package com.playerdemo
 
 import android.app.Activity
+import android.net.Uri
 import android.util.Log
-import android.widget.MediaController
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.widget.Toast
-import android.widget.VideoView
 import org.videolan.libvlc.IVLCVout
 import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import java.util.*
 
 
 class VideoController(activity: Activity): IVLCVout.Callback, MediaPlayer.EventListener {
+    // create TAG for logging
     companion object {
-       // private var logger= Logger.getLogger(VideoController::class.java)
+        private var TAG= "VideoController"
     }
-
+    // declare media player object
     private var mediaPlayer: MediaPlayer?=null
-    var videoView: VideoView?=null
-    private var videoWidth: Int = 0
-    private var videoHeight: Int = 0
+    // declare surface view object
+    var mSurface: SurfaceView?=null
+    // declare surface holder object
+    var holder: SurfaceHolder?= null
+
+    // declare libvlc object
     private var libvlc: LibVLC?=null
+
+    // declare/initialize activity
     private var activity: Activity?=null
     init {
         this.activity=activity
     }
 
 
-    /**
-     * Used to set size for videoView
 
-     * @param width
-     * *
-     * @param height
-     */
-    private fun setSize(width: Int, height: Int,screenWidth:Int,screenHeight:Int) {
-        videoWidth = width
-        videoHeight = height
-        var w = screenWidth
-        var h = screenHeight
-
-        if (videoWidth * videoHeight <= 1)
-            return
-
-        if ( videoView == null)
-            return
-
-        val isPortrait =true /*resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT*/
-
-        if (w > h && isPortrait || w < h && !isPortrait) {
-            val i = w
-            w = h
-            h = i
-        }
-
-        val videoAR = videoWidth.toFloat() / videoHeight.toFloat()
-        val screenAR = w.toFloat() / h.toFloat()
-
-        if (screenAR < videoAR)
-            h = (w / videoAR).toInt()
-        else
-            w = (h * videoAR).toInt()
-
-        videoView!!.holder!!.setFixedSize(videoWidth, videoHeight)
-        val lp = videoView!!.getLayoutParams()
-        lp.width = w
-        lp.height = h
-        videoView!!.setLayoutParams(lp)
-        videoView!!.invalidate()
-    }
 
     /**
      * Creates MediaPlayer and plays video
@@ -76,37 +43,38 @@ class VideoController(activity: Activity): IVLCVout.Callback, MediaPlayer.EventL
      * @param media
      */
     fun createPlayer(media: String) {
-        releasePlayer()
+        if(mediaPlayer!=null && libvlc!=null){
+            releasePlayer()
+        }
+        Log.i(TAG, "Creating vlc player")
         try {
-            if (media.length > 0){
-               // logger.info(media)
-            }
-
-            // Create LibVLC
+            // create arraylist to assign option to create libvlc object
             val options = ArrayList<String>()
-            // options.add("--subsdec-encoding <encoding>")
             options.add("--aout=opensles")
+            options.add("--http-reconnect")
             options.add("--audio-time-stretch") // time stretching
+            options.add("--network-caching=1500")
             options.add("-vvv") // verbosity
-            libvlc = LibVLC(activity,options)
+
+            // create libvlc object
+            libvlc = LibVLC(activity, options)
+
+            // get surface view holder to display video
+            this.holder=mSurface!!.holder
+            holder!!.setKeepScreenOn(true)
 
             // Creating media player
             mediaPlayer = MediaPlayer(libvlc)
-            mediaPlayer!!.setEventListener(this)
 
-            // Seting up video output
-            if(videoView!=null){
-                videoView!!.setMediaController(MediaController(activity))
-                Log.i("url = ",media)
-                videoView!!.setVideoPath(media)
-//              videoView!!.setVideoURI(Umedia))
+            // Setting up video output
+            val vout = mediaPlayer!!.vlcVout
+            vout.setVideoView(mSurface)
+            vout.addCallback(this)
+            vout.attachViews()
+            val m = Media(libvlc, Uri.parse(media))
+            mediaPlayer!!.setMedia(m)
+            mediaPlayer!!.play()
 
-                videoView!!.setOnPreparedListener(android.media.MediaPlayer.OnPreparedListener {
-                    Log.d("TAG", "OnPrepared called") })
-                videoView!!.start()
-            }else{
-                Log.i("error = ","null video view")
-            }
 
         } catch (e: Exception) {
             Toast.makeText(activity, "Error in creating player!", Toast
@@ -115,18 +83,24 @@ class VideoController(activity: Activity): IVLCVout.Callback, MediaPlayer.EventL
 
     }
 
+    /*
+   * release player
+   * */
     fun releasePlayer() {
+        Log.i(TAG,"releasing player started")
         if (libvlc == null)
             return
         mediaPlayer!!.stop()
         var vout: IVLCVout = mediaPlayer!!.vlcVout
         vout.removeCallback(this)
         vout.detachViews()
-        videoView = null
+        mediaPlayer!!.release()
+        mediaPlayer=null
+        holder = null
         libvlc!!.release()
-        libvlc = null;
-        videoWidth = 0;
-        videoHeight = 0;
+        libvlc = null
+
+        Log.i(TAG,"released player")
     }
 
     override fun onEvent(event: MediaPlayer.Event) {
@@ -144,26 +118,21 @@ class VideoController(activity: Activity): IVLCVout.Callback, MediaPlayer.EventL
     }
 
     override fun onSurfacesCreated(vlcVout: IVLCVout?) {
+        val sw = mSurface!!.width
+        val sh = mSurface!!.height
 
+        if (sw * sh == 0) {
+            Log.e(TAG, "Invalid surface size")
+            return
+        }
+
+        mediaPlayer!!.vlcVout.setWindowSize(sw, sh)
+        mediaPlayer!!.aspectRatio="4:3"
+        mediaPlayer!!.setScale(0f)
     }
 
     override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {
-
-    }
-
-    override fun onNewLayout(vlcVout: IVLCVout?, width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int) {
-        if (width * height == 0)
-            return;
-
-        // store video size
-        videoWidth = width
-        videoHeight = height
-        setSize(videoWidth, videoHeight,activity!!.window.decorView.width,activity!!.window.decorView.height)
-    }
-
-
-    override fun onHardwareAccelerationError(vlcVout: IVLCVout?) {
-        this.releasePlayer()
+        releasePlayer()
     }
 
 }

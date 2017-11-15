@@ -18,8 +18,8 @@
         android:padding="10dp"
         android:text="OK" />
 
-    <VideoView
-        android:id="@+id/videoView1"
+    <SurfaceView
+        android:id="@+id/surfaceView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true" />
