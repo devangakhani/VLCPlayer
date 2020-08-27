@@ -65,6 +65,9 @@ class VideoController(activity: Activity): IVLCVout.Callback, MediaPlayer.EventL
 
             // Creating media player
             mediaPlayer = MediaPlayer(libvlc)
+            
+            // Listen events
+            mediaPlayer!!.setEventListener(this)
 
             // Setting up video output
             val vout = mediaPlayer!!.vlcVout
